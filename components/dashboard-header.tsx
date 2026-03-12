@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Bell, ChevronDown } from "lucide-react"
+import { Bell } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,11 +14,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 interface DashboardHeaderProps {
   onOpenSettings: (tab?: string) => void
-  showVersionDropdown?: boolean
   title?: string
 }
 
-export function DashboardHeader({ onOpenSettings, showVersionDropdown = true, title }: DashboardHeaderProps) {
+export function DashboardHeader({ onOpenSettings, title }: DashboardHeaderProps) {
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
 
@@ -35,14 +34,7 @@ export function DashboardHeader({ onOpenSettings, showVersionDropdown = true, ti
     return (
       <header className="flex h-14 items-center justify-between border-b border-border bg-background px-4">
         <div className="flex items-center gap-2">
-          {title ? (
-            <span className="text-lg font-semibold">{title}</span>
-          ) : showVersionDropdown ? (
-            <Button variant="ghost" className="gap-2 px-2 font-medium">
-              WorkwithMe 1.6 Lite
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            </Button>
-          ) : null}
+          {title && <span className="text-lg font-semibold">{title}</span>}
         </div>
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" className="relative h-8 w-8">
@@ -62,23 +54,7 @@ export function DashboardHeader({ onOpenSettings, showVersionDropdown = true, ti
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-background px-4">
       <div className="flex items-center gap-2">
-        {title ? (
-          <span className="text-lg font-semibold">{title}</span>
-        ) : showVersionDropdown ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="gap-2 px-2 font-medium">
-                WorkwithMe 1.6 Lite
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem>WorkwithMe 1.6 Lite</DropdownMenuItem>
-              <DropdownMenuItem>WorkwithMe 1.6 Pro</DropdownMenuItem>
-              <DropdownMenuItem>WorkwithMe 1.6 Max</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
+        {title && <span className="text-lg font-semibold">{title}</span>}
       </div>
 
       <div className="flex items-center gap-3">
