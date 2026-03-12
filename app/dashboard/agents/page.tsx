@@ -21,8 +21,20 @@ import {
   Code,
   Sparkles,
   Monitor,
+  Download,
+  ChevronLeft,
+  ChevronRight,
+  Play,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+interface Slide {
+  id: string
+  title: string
+  content: string[]
+  backgroundColor?: string
+  textColor?: string
+}
 
 interface Message {
   id: string
@@ -33,6 +45,7 @@ interface Message {
   taskId?: string
   steps?: TaskStep[]
   artifacts?: Artifact[]
+  slides?: Slide[]
 }
 
 interface TaskStep {
@@ -157,6 +170,12 @@ export default function AgentsPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [pollingTaskId, setPollingTaskId] = useState<string | null>(null)
+  const [slideMode, setSlideMode] = useState<"idle" | "wizard" | "generating" | "viewing">("idle")
+  const [slideWizardStep, setSlideWizardStep] = useState(0)
+  const [slideDetails, setSlideDetails] = useState({ topic: "", audience: "", slideCount: "5", style: "professional" })
+  const [generatedSlides, setGeneratedSlides] = useState<Slide[]>([])
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -457,8 +476,173 @@ export default function AgentsPage() {
   }
 
   const handleQuickAction = (action: string) => {
-    setInputValue(action)
+    if (action === "Create slides") {
+      setSlideMode("wizard")
+      setSlideWizardStep(0)
+      setSlideDetails({ topic: "", audience: "", slideCount: "5", style: "professional" })
+      return
+    }
+    // For other quick actions, set the input and focus
+    const prompts: Record<string, string> = {
+      "Build website": "Help me build a website",
+      "Develop apps": "Help me develop an app",
+      "Design": "Help me design",
+    }
+    setInputValue(prompts[action] || action)
     textareaRef.current?.focus()
+  }
+
+  const generateSlides = async () => {
+    setSlideMode("generating")
+    
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: `Create a ${slideDetails.slideCount}-slide presentation about "${slideDetails.topic}" for ${slideDetails.audience || "general audience"}. Style: ${slideDetails.style}.`,
+      timestamp: new Date(),
+    }
+
+    const assistantMessage: Message = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
+      status: "pending",
+      steps: [
+        {
+          id: crypto.randomUUID(),
+          type: "thinking",
+          description: "Creating your presentation...",
+          timestamp: new Date(),
+        }
+      ]
+    }
+
+    setMessages(prev => [...prev, userMessage, assistantMessage])
+    setIsLoading(true)
+
+    // Simulate slide generation (in production, this would call an AI API)
+    await new Promise(resolve => setTimeout(resolve, 2000))
+
+    const slideCount = parseInt(slideDetails.slideCount) || 5
+    const slides: Slide[] = generateMockSlides(slideDetails.topic, slideCount, slideDetails.style)
+    
+    setGeneratedSlides(slides)
+    setCurrentSlideIndex(0)
+    
+    setMessages(prev => prev.map(m => 
+      m.id === assistantMessage.id 
+        ? { 
+            ...m, 
+            content: `I've created a ${slides.length}-slide presentation about "${slideDetails.topic}". You can view it below, navigate through slides, or download it.`,
+            status: "completed",
+            slides: slides,
+            steps: [
+              ...(m.steps || []),
+              {
+                id: crypto.randomUUID(),
+                type: "complete",
+                description: "Presentation created successfully",
+                timestamp: new Date(),
+              }
+            ]
+          }
+        : m
+    ))
+    
+    setIsLoading(false)
+    setSlideMode("viewing")
+  }
+
+  const generateMockSlides = (topic: string, count: number, style: string): Slide[] => {
+    const colors = {
+      professional: { bg: "#1e293b", text: "#ffffff" },
+      creative: { bg: "#7c3aed", text: "#ffffff" },
+      minimal: { bg: "#ffffff", text: "#1e293b" },
+      dark: { bg: "#0f172a", text: "#e2e8f0" },
+    }
+    const selectedColors = colors[style as keyof typeof colors] || colors.professional
+
+    const slides: Slide[] = [
+      {
+        id: crypto.randomUUID(),
+        title: topic,
+        content: ["A comprehensive presentation", `Created for ${slideDetails.audience || "your audience"}`],
+        backgroundColor: selectedColors.bg,
+        textColor: selectedColors.text,
+      }
+    ]
+
+    const sectionTitles = [
+      "Introduction", "Key Concepts", "Main Points", "Analysis", 
+      "Case Studies", "Benefits", "Challenges", "Solutions",
+      "Implementation", "Results", "Future Outlook", "Conclusion"
+    ]
+
+    for (let i = 1; i < count - 1; i++) {
+      slides.push({
+        id: crypto.randomUUID(),
+        title: sectionTitles[i % sectionTitles.length],
+        content: [
+          `Key point ${i}.1 about ${topic}`,
+          `Key point ${i}.2 with supporting details`,
+          `Key point ${i}.3 for deeper understanding`,
+        ],
+        backgroundColor: selectedColors.bg,
+        textColor: selectedColors.text,
+      })
+    }
+
+    slides.push({
+      id: crypto.randomUUID(),
+      title: "Thank You",
+      content: ["Questions?", "Contact: your@email.com"],
+      backgroundColor: selectedColors.bg,
+      textColor: selectedColors.text,
+    })
+
+    return slides
+  }
+
+  const downloadSlides = () => {
+    // Create HTML content for slides
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>${slideDetails.topic} - Presentation</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; }
+    .slide { width: 100vw; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 4rem; page-break-after: always; }
+    .slide h1 { font-size: 3rem; margin-bottom: 2rem; text-align: center; }
+    .slide ul { font-size: 1.5rem; list-style: none; }
+    .slide li { margin: 1rem 0; }
+    @media print { .slide { page-break-after: always; } }
+  </style>
+</head>
+<body>
+${generatedSlides.map(slide => `
+  <div class="slide" style="background-color: ${slide.backgroundColor}; color: ${slide.textColor};">
+    <h1>${slide.title}</h1>
+    <ul>
+      ${slide.content.map(item => `<li>${item}</li>`).join('')}
+    </ul>
+  </div>
+`).join('')}
+</body>
+</html>
+    `
+    
+    const blob = new Blob([htmlContent], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${slideDetails.topic.replace(/[^a-z0-9]/gi, '_')}_presentation.html`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   const getStepIcon = (type: TaskStep["type"], isLast: boolean) => {
@@ -589,6 +773,75 @@ export default function AgentsPage() {
                           )}
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Slides Viewer */}
+                  {message.slides && message.slides.length > 0 && (
+                    <div className="mt-4">
+                      <div 
+                        className="relative aspect-video overflow-hidden rounded-lg border border-border"
+                        style={{ 
+                          backgroundColor: message.slides[currentSlideIndex]?.backgroundColor || "#1e293b",
+                          color: message.slides[currentSlideIndex]?.textColor || "#ffffff"
+                        }}
+                      >
+                        <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+                          <h2 className="mb-4 text-2xl font-bold">
+                            {message.slides[currentSlideIndex]?.title}
+                          </h2>
+                          <ul className="space-y-2 text-lg">
+                            {message.slides[currentSlideIndex]?.content.map((item, i) => (
+                              <li key={i}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        
+                        {/* Slide counter */}
+                        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-xs text-white">
+                          {currentSlideIndex + 1} / {message.slides.length}
+                        </div>
+                      </div>
+                      
+                      {/* Slide controls */}
+                      <div className="mt-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))}
+                            disabled={currentSlideIndex === 0}
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentSlideIndex(Math.min(message.slides!.length - 1, currentSlideIndex + 1))}
+                            disabled={currentSlideIndex === message.slides.length - 1}
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsFullscreen(true)}
+                          >
+                            <Play className="mr-1 h-4 w-4" />
+                            Present
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={downloadSlides}
+                          >
+                            <Download className="mr-1 h-4 w-4" />
+                            Download
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -802,7 +1055,7 @@ export default function AgentsPage() {
               key={action.label}
               variant="outline"
               className="gap-2 rounded-full border-border bg-background hover:bg-muted"
-              onClick={() => handleQuickAction(`Help me ${action.label.toLowerCase()}`)}
+              onClick={() => handleQuickAction(action.label)}
             >
               <action.icon className="h-4 w-4" />
               {action.label}
@@ -817,6 +1070,185 @@ export default function AgentsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Slide Creation Wizard Modal */}
+      {slideMode === "wizard" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-lg rounded-2xl bg-background p-6 shadow-xl">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-xl font-semibold">Create Presentation</h3>
+              <Button variant="ghost" size="icon" onClick={() => setSlideMode("idle")}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {slideWizardStep === 0 && (
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium">What is your presentation about?</label>
+                  <textarea
+                    value={slideDetails.topic}
+                    onChange={(e) => setSlideDetails(prev => ({ ...prev, topic: e.target.value }))}
+                    placeholder="e.g., Quarterly sales report, Product launch strategy, Team introduction..."
+                    className="min-h-[100px] w-full rounded-lg border border-border bg-background p-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setSlideMode("idle")}>Cancel</Button>
+                  <Button 
+                    onClick={() => setSlideWizardStep(1)}
+                    disabled={!slideDetails.topic.trim()}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {slideWizardStep === 1 && (
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Who is your audience?</label>
+                  <input
+                    type="text"
+                    value={slideDetails.audience}
+                    onChange={(e) => setSlideDetails(prev => ({ ...prev, audience: e.target.value }))}
+                    placeholder="e.g., Executive team, Investors, New employees..."
+                    className="w-full rounded-lg border border-border bg-background p-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Number of slides</label>
+                  <select
+                    value={slideDetails.slideCount}
+                    onChange={(e) => setSlideDetails(prev => ({ ...prev, slideCount: e.target.value }))}
+                    className="w-full rounded-lg border border-border bg-background p-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="3">3 slides (Brief)</option>
+                    <option value="5">5 slides (Standard)</option>
+                    <option value="8">8 slides (Detailed)</option>
+                    <option value="12">12 slides (Comprehensive)</option>
+                  </select>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setSlideWizardStep(0)}>Back</Button>
+                  <Button onClick={() => setSlideWizardStep(2)}>Next</Button>
+                </div>
+              </div>
+            )}
+
+            {slideWizardStep === 2 && (
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium">Presentation style</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { value: "professional", label: "Professional", desc: "Clean and corporate" },
+                      { value: "creative", label: "Creative", desc: "Bold and colorful" },
+                      { value: "minimal", label: "Minimal", desc: "Simple and elegant" },
+                      { value: "dark", label: "Dark Mode", desc: "Modern dark theme" },
+                    ].map((style) => (
+                      <button
+                        key={style.value}
+                        onClick={() => setSlideDetails(prev => ({ ...prev, style: style.value }))}
+                        className={cn(
+                          "rounded-lg border p-3 text-left transition-colors",
+                          slideDetails.style === style.value
+                            ? "border-primary bg-primary/10"
+                            : "border-border hover:bg-muted"
+                        )}
+                      >
+                        <p className="font-medium">{style.label}</p>
+                        <p className="text-xs text-muted-foreground">{style.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setSlideWizardStep(1)}>Back</Button>
+                  <Button onClick={generateSlides}>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Generate Slides
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen Presentation Mode */}
+      {isFullscreen && generatedSlides.length > 0 && (
+        <div 
+          className="fixed inset-0 z-50 flex flex-col"
+          style={{ 
+            backgroundColor: generatedSlides[currentSlideIndex]?.backgroundColor || "#1e293b",
+            color: generatedSlides[currentSlideIndex]?.textColor || "#ffffff"
+          }}
+          onClick={(e) => {
+            const rect = (e.target as HTMLElement).getBoundingClientRect()
+            const x = e.clientX - rect.left
+            if (x < rect.width / 2) {
+              setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))
+            } else {
+              setCurrentSlideIndex(Math.min(generatedSlides.length - 1, currentSlideIndex + 1))
+            }
+          }}
+        >
+          <div className="flex flex-1 flex-col items-center justify-center p-12">
+            <h1 className="mb-8 text-5xl font-bold">
+              {generatedSlides[currentSlideIndex]?.title}
+            </h1>
+            <ul className="space-y-4 text-2xl">
+              {generatedSlides[currentSlideIndex]?.content.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+          </div>
+          
+          {/* Fullscreen controls */}
+          <div className="flex items-center justify-between border-t border-white/10 bg-black/20 p-4">
+            <div className="text-sm">
+              {currentSlideIndex + 1} / {generatedSlides.length}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/10"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))
+                }}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/10"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setCurrentSlideIndex(Math.min(generatedSlides.length - 1, currentSlideIndex + 1))
+                }}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/10"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setIsFullscreen(false)
+                }}
+              >
+                Exit
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
