@@ -124,6 +124,7 @@ Do not include any text before or after the JSON. Only output the JSON object.`
 
       if (statusResponse.ok) {
         const statusData = await statusResponse.json()
+        console.log('[v0] Poll status data:', JSON.stringify(statusData, null, 2))
         
         if (statusData.status === 'completed' || statusData.status === 'finished') {
           result = statusData
@@ -142,20 +143,35 @@ Do not include any text before or after the JSON. Only output the JSON object.`
     }
 
     // Parse the response to extract slides
-    const output = result.output || result.result || result.response || ''
+    const rawOutput = result.output || result.result || result.response || result.content || ''
+    console.log('[v0] Raw output type:', typeof rawOutput)
+    console.log('[v0] Raw output:', JSON.stringify(rawOutput, null, 2))
+    
+    // Convert to string if it's an object
+    const output = typeof rawOutput === 'string' ? rawOutput : JSON.stringify(rawOutput)
     let slides: SlideData[] = []
 
     try {
-      // Try to extract JSON from the response
-      const jsonMatch = output.match(/\{[\s\S]*"slides"[\s\S]*\}/)
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0])
-        slides = parsed.slides
+      // If rawOutput is already an object with slides, use it directly
+      if (typeof rawOutput === 'object' && rawOutput !== null) {
+        if (rawOutput.slides) {
+          slides = rawOutput.slides
+        } else if (Array.isArray(rawOutput)) {
+          slides = rawOutput
+        }
       }
-    } catch {
+      
+      // Try to extract JSON from the string response
+      if (slides.length === 0) {
+        const jsonMatch = output.match(/\{[\s\S]*"slides"[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          slides = parsed.slides
+        }
+      }
+    } catch (e) {
       // If JSON parsing fails, create slides from the text response
-      console.log('Parsing as text response')
-      slides = parseTextToSlides(output, topic, parseInt(slideCount))
+      console.log('[v0] JSON parsing failed:', e)
     }
 
     if (!slides || slides.length === 0) {
