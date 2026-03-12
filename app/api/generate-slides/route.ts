@@ -5,6 +5,39 @@ interface SlideData {
   content: string[]
 }
 
+// Helper to extract text from various content formats
+function extractText(item: unknown): string {
+  if (typeof item === 'string') return item
+  if (typeof item === 'object' && item !== null) {
+    const obj = item as Record<string, unknown>
+    // Handle {type: "text", text: "..."} format
+    if (obj.text && typeof obj.text === 'string') return obj.text
+    // Handle {content: "..."} format
+    if (obj.content && typeof obj.content === 'string') return obj.content
+    // Handle {value: "..."} format
+    if (obj.value && typeof obj.value === 'string') return obj.value
+  }
+  return String(item)
+}
+
+// Normalize slides to ensure content is always string[]
+function normalizeSlides(slides: unknown[]): SlideData[] {
+  return slides.map((slide) => {
+    const s = slide as Record<string, unknown>
+    const title = extractText(s.title)
+    const rawContent = s.content
+    let content: string[] = []
+    
+    if (Array.isArray(rawContent)) {
+      content = rawContent.map(extractText)
+    } else if (rawContent) {
+      content = [extractText(rawContent)]
+    }
+    
+    return { title, content }
+  })
+}
+
 export async function POST(req: Request) {
   const { topic, audience, slideCount, style } = await req.json()
 
@@ -96,7 +129,7 @@ Do not include any text before or after the JSON. Only output the JSON object.`
         slides = parseTextToSlides(typeof directOutput === 'string' ? directOutput : JSON.stringify(directOutput), topic, parseInt(slideCount))
       }
       
-      return Response.json({ slides })
+      return Response.json({ slides: normalizeSlides(slides) })
     }
 
     if (!taskId) {
@@ -178,7 +211,7 @@ Do not include any text before or after the JSON. Only output the JSON object.`
       slides = parseTextToSlides(output, topic, parseInt(slideCount))
     }
 
-    return Response.json({ slides })
+    return Response.json({ slides: normalizeSlides(slides) })
   } catch (error) {
     console.error('Error generating slides:', error)
     return Response.json(
