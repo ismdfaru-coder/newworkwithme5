@@ -61,16 +61,50 @@ Do not include any text before or after the JSON. Only output the JSON object.`
 
     if (!createResponse.ok) {
       const errorText = await createResponse.text()
-      console.error('Error creating Manus task:', errorText)
+      console.error('[v0] Error creating Manus task:', errorText)
       throw new Error(`Manus API error: ${createResponse.status}`)
     }
 
     const createData = await createResponse.json()
-    const taskId = createData.taskId || createData.id
+    console.log('[v0] Manus API response:', JSON.stringify(createData, null, 2))
+    
+    // The Manus API might return the task ID in different fields or return the result directly
+    const taskId = createData.taskId || createData.id || createData.task_id
+    
+    // If response already contains the output/result, use it directly (some APIs return inline)
+    if (createData.output || createData.result || createData.response || createData.message) {
+      console.log('[v0] Got direct response from Manus API')
+      const directOutput = createData.output || createData.result || createData.response || createData.message || ''
+      let slides: SlideData[] = []
+      
+      try {
+        // Try to extract JSON from the response
+        const jsonMatch = typeof directOutput === 'string' 
+          ? directOutput.match(/\{[\s\S]*"slides"[\s\S]*\}/)
+          : null
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          slides = parsed.slides
+        } else if (typeof directOutput === 'object' && directOutput.slides) {
+          slides = directOutput.slides
+        }
+      } catch {
+        console.log('[v0] JSON parsing failed, using text parser')
+      }
+      
+      if (!slides || slides.length === 0) {
+        slides = parseTextToSlides(typeof directOutput === 'string' ? directOutput : JSON.stringify(directOutput), topic, parseInt(slideCount))
+      }
+      
+      return Response.json({ slides })
+    }
 
     if (!taskId) {
+      console.error('[v0] No task ID found in response:', createData)
       throw new Error('No task ID returned from Manus API')
     }
+    
+    console.log('[v0] Got task ID:', taskId)
 
     // Poll for completion
     let attempts = 0
