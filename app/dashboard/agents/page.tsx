@@ -502,8 +502,9 @@ export default function AgentsPage() {
       timestamp: new Date(),
     }
 
+    const assistantMessageId = crypto.randomUUID()
     const assistantMessage: Message = {
-      id: crypto.randomUUID(),
+      id: assistantMessageId,
       role: "assistant",
       content: "",
       timestamp: new Date(),
@@ -511,8 +512,8 @@ export default function AgentsPage() {
       steps: [
         {
           id: crypto.randomUUID(),
-          type: "thinking",
-          description: "Creating your presentation...",
+          type: "searching",
+          description: `Researching "${slideDetails.topic}"...`,
           timestamp: new Date(),
         }
       ]
@@ -521,87 +522,131 @@ export default function AgentsPage() {
     setMessages(prev => [...prev, userMessage, assistantMessage])
     setIsLoading(true)
 
-    // Simulate slide generation (in production, this would call an AI API)
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    // Update status to analyzing
+    setTimeout(() => {
+      setMessages(prev => prev.map(m => 
+        m.id === assistantMessageId 
+          ? { 
+              ...m, 
+              steps: [
+                ...(m.steps || []),
+                {
+                  id: crypto.randomUUID(),
+                  type: "analyzing",
+                  description: "Analyzing key points and insights...",
+                  timestamp: new Date(),
+                }
+              ]
+            }
+          : m
+      ))
+    }, 1500)
 
-    const slideCount = parseInt(slideDetails.slideCount) || 5
-    const slides: Slide[] = generateMockSlides(slideDetails.topic, slideCount, slideDetails.style)
-    
-    setGeneratedSlides(slides)
-    setCurrentSlideIndex(0)
-    
-    setMessages(prev => prev.map(m => 
-      m.id === assistantMessage.id 
-        ? { 
-            ...m, 
-            content: `I've created a ${slides.length}-slide presentation about "${slideDetails.topic}". You can view it below, navigate through slides, or download it.`,
-            status: "completed",
-            slides: slides,
-            steps: [
-              ...(m.steps || []),
-              {
-                id: crypto.randomUUID(),
-                type: "complete",
-                description: "Presentation created successfully",
-                timestamp: new Date(),
-              }
-            ]
-          }
-        : m
-    ))
-    
-    setIsLoading(false)
-    setSlideMode("viewing")
-  }
+    // Update status to writing
+    setTimeout(() => {
+      setMessages(prev => prev.map(m => 
+        m.id === assistantMessageId 
+          ? { 
+              ...m, 
+              steps: [
+                ...(m.steps || []),
+                {
+                  id: crypto.randomUUID(),
+                  type: "writing",
+                  description: "Generating presentation slides...",
+                  timestamp: new Date(),
+                }
+              ]
+            }
+          : m
+      ))
+    }, 3000)
 
-  const generateMockSlides = (topic: string, count: number, style: string): Slide[] => {
-    const colors = {
-      professional: { bg: "#1e293b", text: "#ffffff" },
-      creative: { bg: "#7c3aed", text: "#ffffff" },
-      minimal: { bg: "#ffffff", text: "#1e293b" },
-      dark: { bg: "#0f172a", text: "#e2e8f0" },
-    }
-    const selectedColors = colors[style as keyof typeof colors] || colors.professional
-
-    const slides: Slide[] = [
-      {
-        id: crypto.randomUUID(),
-        title: topic,
-        content: ["A comprehensive presentation", `Created for ${slideDetails.audience || "your audience"}`],
-        backgroundColor: selectedColors.bg,
-        textColor: selectedColors.text,
-      }
-    ]
-
-    const sectionTitles = [
-      "Introduction", "Key Concepts", "Main Points", "Analysis", 
-      "Case Studies", "Benefits", "Challenges", "Solutions",
-      "Implementation", "Results", "Future Outlook", "Conclusion"
-    ]
-
-    for (let i = 1; i < count - 1; i++) {
-      slides.push({
-        id: crypto.randomUUID(),
-        title: sectionTitles[i % sectionTitles.length],
-        content: [
-          `Key point ${i}.1 about ${topic}`,
-          `Key point ${i}.2 with supporting details`,
-          `Key point ${i}.3 for deeper understanding`,
-        ],
-        backgroundColor: selectedColors.bg,
-        textColor: selectedColors.text,
+    try {
+      // Call the AI API to generate slides
+      const response = await fetch('/api/generate-slides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: slideDetails.topic,
+          audience: slideDetails.audience,
+          slideCount: slideDetails.slideCount,
+          style: slideDetails.style,
+        }),
       })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate slides')
+      }
+
+      const data = await response.json()
+      
+      // Get style colors
+      const colors = {
+        professional: { bg: "#1e293b", text: "#ffffff" },
+        creative: { bg: "#7c3aed", text: "#ffffff" },
+        minimal: { bg: "#ffffff", text: "#1e293b" },
+        dark: { bg: "#0f172a", text: "#e2e8f0" },
+      }
+      const selectedColors = colors[slideDetails.style as keyof typeof colors] || colors.professional
+
+      // Transform API response to slides with colors
+      const slides: Slide[] = data.slides.map((slide: { title: string; content: string[] }) => ({
+        id: crypto.randomUUID(),
+        title: slide.title,
+        content: slide.content,
+        backgroundColor: selectedColors.bg,
+        textColor: selectedColors.text,
+      }))
+      
+      setGeneratedSlides(slides)
+      setCurrentSlideIndex(0)
+      
+      setMessages(prev => prev.map(m => 
+        m.id === assistantMessageId 
+          ? { 
+              ...m, 
+              content: `I've researched "${slideDetails.topic}" and created a ${slides.length}-slide presentation with key insights and information. You can view it below, navigate through slides, present in fullscreen, or download it.`,
+              status: "completed",
+              slides: slides,
+              steps: [
+                ...(m.steps || []),
+                {
+                  id: crypto.randomUUID(),
+                  type: "complete",
+                  description: "Presentation created successfully",
+                  timestamp: new Date(),
+                }
+              ]
+            }
+          : m
+      ))
+      
+      setSlideMode("viewing")
+    } catch (error) {
+      console.error('Error generating slides:', error)
+      setMessages(prev => prev.map(m => 
+        m.id === assistantMessageId 
+          ? { 
+              ...m, 
+              content: "I encountered an error while generating the presentation. Please try again.",
+              status: "error",
+              steps: [
+                ...(m.steps || []),
+                {
+                  id: crypto.randomUUID(),
+                  type: "complete",
+                  description: "Error generating presentation",
+                  timestamp: new Date(),
+                }
+              ]
+            }
+          : m
+      ))
+      setSlideMode("idle")
+    } finally {
+      setIsLoading(false)
     }
-
-    slides.push({
-      id: crypto.randomUUID(),
-      title: "Thank You",
-      content: ["Questions?", "Contact: your@email.com"],
-      backgroundColor: selectedColors.bg,
-      textColor: selectedColors.text,
-    })
-
-    return slides
   }
 
   const downloadSlides = () => {
