@@ -649,45 +649,154 @@ export default function AgentsPage() {
     }
   }
 
-  const downloadSlides = () => {
-    // Create HTML content for slides
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <title>${slideDetails.topic} - Presentation</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, sans-serif; }
-    .slide { width: 100vw; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 4rem; page-break-after: always; }
-    .slide h1 { font-size: 3rem; margin-bottom: 2rem; text-align: center; }
-    .slide ul { font-size: 1.5rem; list-style: none; }
-    .slide li { margin: 1rem 0; }
-    @media print { .slide { page-break-after: always; } }
-  </style>
-</head>
-<body>
-${generatedSlides.map(slide => `
-  <div class="slide" style="background-color: ${slide.backgroundColor}; color: ${slide.textColor};">
-    <h1>${slide.title}</h1>
-    <ul>
-      ${slide.content.map(item => `<li>${item}</li>`).join('')}
-    </ul>
-  </div>
-`).join('')}
-</body>
-</html>
-    `
+  const downloadSlides = async () => {
+    // Dynamic import pptxgenjs to avoid SSR issues
+    const pptxgen = (await import('pptxgenjs')).default
     
-    const blob = new Blob([htmlContent], { type: 'text/html' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${slideDetails.topic.replace(/[^a-z0-9]/gi, '_')}_presentation.html`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    // Create presentation
+    const pres = new pptxgen()
+    pres.author = 'WorkwithMe AI'
+    pres.title = slideDetails.topic
+    pres.subject = `Presentation about ${slideDetails.topic}`
+    
+    // Define color schemes for different styles
+    const colorSchemes = {
+      professional: { bg: '1e293b', title: 'FFFFFF', text: 'E2E8F0', accent: '3B82F6' },
+      creative: { bg: '7c3aed', title: 'FFFFFF', text: 'E9D5FF', accent: 'F472B6' },
+      minimal: { bg: 'FFFFFF', title: '1e293b', text: '475569', accent: '0EA5E9' },
+      dark: { bg: '0f172a', title: 'F8FAFC', text: 'CBD5E1', accent: '22D3EE' },
+    }
+    const colors = colorSchemes[slideDetails.style as keyof typeof colorSchemes] || colorSchemes.professional
+
+    generatedSlides.forEach((slide, index) => {
+      const pptSlide = pres.addSlide()
+      
+      // Set slide background
+      pptSlide.background = { color: colors.bg }
+      
+      if (index === 0) {
+        // Title slide - centered, larger text
+        pptSlide.addText(slide.title, {
+          x: 0.5,
+          y: '35%',
+          w: '90%',
+          h: 1.5,
+          fontSize: 44,
+          fontFace: 'Arial',
+          color: colors.title,
+          bold: true,
+          align: 'center',
+        })
+        
+        // Subtitle/tagline
+        if (slide.content.length > 0) {
+          pptSlide.addText(slide.content.join(' | '), {
+            x: 0.5,
+            y: '55%',
+            w: '90%',
+            h: 0.75,
+            fontSize: 20,
+            fontFace: 'Arial',
+            color: colors.text,
+            align: 'center',
+          })
+        }
+        
+        // Accent line
+        pptSlide.addShape('rect' as pptxgen.ShapeType, {
+          x: '35%',
+          y: '50%',
+          w: '30%',
+          h: 0.05,
+          fill: { color: colors.accent },
+        })
+      } else if (index === generatedSlides.length - 1) {
+        // Thank you slide
+        pptSlide.addText(slide.title, {
+          x: 0.5,
+          y: '40%',
+          w: '90%',
+          h: 1.5,
+          fontSize: 48,
+          fontFace: 'Arial',
+          color: colors.title,
+          bold: true,
+          align: 'center',
+        })
+        
+        if (slide.content.length > 0) {
+          pptSlide.addText(slide.content.join('\n'), {
+            x: 0.5,
+            y: '55%',
+            w: '90%',
+            h: 1,
+            fontSize: 18,
+            fontFace: 'Arial',
+            color: colors.text,
+            align: 'center',
+          })
+        }
+      } else {
+        // Content slides
+        // Title at top
+        pptSlide.addText(slide.title, {
+          x: 0.5,
+          y: 0.5,
+          w: '90%',
+          h: 1,
+          fontSize: 32,
+          fontFace: 'Arial',
+          color: colors.title,
+          bold: true,
+        })
+        
+        // Accent line under title
+        pptSlide.addShape('rect' as pptxgen.ShapeType, {
+          x: 0.5,
+          y: 1.4,
+          w: 1.5,
+          h: 0.05,
+          fill: { color: colors.accent },
+        })
+        
+        // Bullet points
+        const bulletPoints = slide.content.map(item => ({
+          text: item,
+          options: { 
+            bullet: { type: 'bullet' as const, color: colors.accent },
+            color: colors.text,
+            fontSize: 18,
+            fontFace: 'Arial',
+            paraSpaceBefore: 12,
+            paraSpaceAfter: 6,
+          }
+        }))
+        
+        pptSlide.addText(bulletPoints, {
+          x: 0.5,
+          y: 1.8,
+          w: '90%',
+          h: 3.5,
+          valign: 'top',
+        })
+      }
+      
+      // Add slide number (except title slide)
+      if (index > 0) {
+        pptSlide.addText(`${index + 1}`, {
+          x: '90%',
+          y: '92%',
+          w: 0.5,
+          h: 0.3,
+          fontSize: 10,
+          color: colors.text,
+          align: 'right',
+        })
+      }
+    })
+
+    // Save the presentation
+    await pres.writeFile({ fileName: `${slideDetails.topic.replace(/[^a-z0-9]/gi, '_')}_presentation.pptx` })
   }
 
   const getStepIcon = (type: TaskStep["type"], isLast: boolean) => {
@@ -821,50 +930,122 @@ ${generatedSlides.map(slide => `
                     </div>
                   )}
 
-                  {/* Slides Viewer */}
+                  {/* Slides Viewer - Professional Presentation Style */}
                   {message.slides && message.slides.length > 0 && (
                     <div className="mt-4">
-                      <div 
-                        className="relative aspect-video overflow-hidden rounded-lg border border-border"
-                        style={{ 
-                          backgroundColor: message.slides[currentSlideIndex]?.backgroundColor || "#1e293b",
-                          color: message.slides[currentSlideIndex]?.textColor || "#ffffff"
-                        }}
-                      >
-                        <div className="flex h-full flex-col items-center justify-center p-8 text-center">
-                          <h2 className="mb-4 text-2xl font-bold">
-                            {message.slides[currentSlideIndex]?.title}
-                          </h2>
-                          <ul className="space-y-2 text-lg">
-                            {message.slides[currentSlideIndex]?.content.map((item, i) => (
-                              <li key={i}>{item}</li>
-                            ))}
-                          </ul>
+                      {/* Main slide viewer */}
+                      <div className="rounded-xl border border-border bg-muted/30 p-4 shadow-lg">
+                        <div 
+                          className="relative aspect-video overflow-hidden rounded-lg shadow-xl"
+                          style={{ 
+                            backgroundColor: message.slides[currentSlideIndex]?.backgroundColor || "#1e293b",
+                            color: message.slides[currentSlideIndex]?.textColor || "#ffffff"
+                          }}
+                        >
+                          {/* Slide content */}
+                          {currentSlideIndex === 0 ? (
+                            // Title slide layout
+                            <div className="flex h-full flex-col items-center justify-center p-8">
+                              <h1 className="mb-4 text-center text-3xl font-bold leading-tight md:text-4xl">
+                                {message.slides[currentSlideIndex]?.title}
+                              </h1>
+                              <div 
+                                className="mb-6 h-1 w-24 rounded-full"
+                                style={{ backgroundColor: slideDetails.style === 'minimal' ? '#0EA5E9' : '#3B82F6' }}
+                              />
+                              <p className="text-center text-lg opacity-80">
+                                {message.slides[currentSlideIndex]?.content.join(' | ')}
+                              </p>
+                            </div>
+                          ) : currentSlideIndex === message.slides.length - 1 ? (
+                            // Thank you slide layout
+                            <div className="flex h-full flex-col items-center justify-center p-8">
+                              <h1 className="mb-6 text-center text-4xl font-bold">
+                                {message.slides[currentSlideIndex]?.title}
+                              </h1>
+                              <div className="space-y-2 text-center text-lg opacity-80">
+                                {message.slides[currentSlideIndex]?.content.map((item, i) => (
+                                  <p key={i}>{item}</p>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            // Content slide layout
+                            <div className="flex h-full flex-col p-6 md:p-8">
+                              <h2 className="mb-2 text-2xl font-bold md:text-3xl">
+                                {message.slides[currentSlideIndex]?.title}
+                              </h2>
+                              <div 
+                                className="mb-6 h-1 w-16 rounded-full"
+                                style={{ backgroundColor: slideDetails.style === 'minimal' ? '#0EA5E9' : '#3B82F6' }}
+                              />
+                              <ul className="flex-1 space-y-3">
+                                {message.slides[currentSlideIndex]?.content.map((item, i) => (
+                                  <li key={i} className="flex items-start gap-3 text-base md:text-lg">
+                                    <span 
+                                      className="mt-2 h-2 w-2 shrink-0 rounded-full"
+                                      style={{ backgroundColor: slideDetails.style === 'minimal' ? '#0EA5E9' : '#3B82F6' }}
+                                    />
+                                    <span className="opacity-90">{item}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          
+                          {/* Slide number badge */}
+                          <div className="absolute bottom-4 right-4 rounded-full bg-black/30 px-3 py-1 text-xs font-medium backdrop-blur-sm">
+                            {currentSlideIndex + 1} / {message.slides.length}
+                          </div>
                         </div>
                         
-                        {/* Slide counter */}
-                        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-xs text-white">
-                          {currentSlideIndex + 1} / {message.slides.length}
+                        {/* Slide thumbnails */}
+                        <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+                          {message.slides.map((slide, idx) => (
+                            <button
+                              key={slide.id}
+                              onClick={() => setCurrentSlideIndex(idx)}
+                              className={cn(
+                                "relative aspect-video w-20 shrink-0 overflow-hidden rounded-md border-2 transition-all hover:opacity-100",
+                                currentSlideIndex === idx 
+                                  ? "border-primary opacity-100 ring-2 ring-primary/30" 
+                                  : "border-transparent opacity-60"
+                              )}
+                              style={{ backgroundColor: slide.backgroundColor }}
+                            >
+                              <div 
+                                className="flex h-full flex-col items-center justify-center p-1"
+                                style={{ color: slide.textColor }}
+                              >
+                                <span className="truncate text-[6px] font-semibold">{slide.title}</span>
+                              </div>
+                              <span className="absolute bottom-0.5 right-0.5 text-[8px] opacity-60">{idx + 1}</span>
+                            </button>
+                          ))}
                         </div>
                       </div>
                       
                       {/* Slide controls */}
-                      <div className="mt-3 flex items-center justify-between">
+                      <div className="mt-4 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))}
                             disabled={currentSlideIndex === 0}
+                            className="gap-1"
                           >
                             <ChevronLeft className="h-4 w-4" />
+                            Previous
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => setCurrentSlideIndex(Math.min(message.slides!.length - 1, currentSlideIndex + 1))}
                             disabled={currentSlideIndex === message.slides.length - 1}
+                            className="gap-1"
                           >
+                            Next
                             <ChevronRight className="h-4 w-4" />
                           </Button>
                         </div>
@@ -873,17 +1054,18 @@ ${generatedSlides.map(slide => `
                             variant="outline"
                             size="sm"
                             onClick={() => setIsFullscreen(true)}
+                            className="gap-1.5"
                           >
-                            <Play className="mr-1 h-4 w-4" />
+                            <Play className="h-4 w-4" />
                             Present
                           </Button>
                           <Button
-                            variant="outline"
                             size="sm"
                             onClick={downloadSlides}
+                            className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
                           >
-                            <Download className="mr-1 h-4 w-4" />
-                            Download
+                            <Download className="h-4 w-4" />
+                            Download PPTX
                           </Button>
                         </div>
                       </div>
@@ -1222,11 +1404,11 @@ ${generatedSlides.map(slide => `
         </div>
       )}
 
-      {/* Fullscreen Presentation Mode */}
+{/* Fullscreen Presentation Mode */}
       {isFullscreen && generatedSlides.length > 0 && (
-        <div 
-          className="fixed inset-0 z-50 flex flex-col"
-          style={{ 
+        <div
+          className="fixed inset-0 z-50 flex flex-col cursor-pointer select-none"
+          style={{
             backgroundColor: generatedSlides[currentSlideIndex]?.backgroundColor || "#1e293b",
             color: generatedSlides[currentSlideIndex]?.textColor || "#ffffff"
           }}
@@ -1239,55 +1421,112 @@ ${generatedSlides.map(slide => `
               setCurrentSlideIndex(Math.min(generatedSlides.length - 1, currentSlideIndex + 1))
             }
           }}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))
+            if (e.key === 'ArrowRight') setCurrentSlideIndex(Math.min(generatedSlides.length - 1, currentSlideIndex + 1))
+            if (e.key === 'Escape') setIsFullscreen(false)
+          }}
+          tabIndex={0}
         >
-          <div className="flex flex-1 flex-col items-center justify-center p-12">
-            <h1 className="mb-8 text-5xl font-bold">
-              {generatedSlides[currentSlideIndex]?.title}
-            </h1>
-            <ul className="space-y-4 text-2xl">
-              {generatedSlides[currentSlideIndex]?.content.map((item, i) => (
-                <li key={i}>{item}</li>
-              ))}
-            </ul>
-          </div>
+          {/* Slide content */}
+          {currentSlideIndex === 0 ? (
+            // Title slide - fullscreen
+            <div className="flex flex-1 flex-col items-center justify-center p-12">
+              <h1 className="mb-6 max-w-4xl text-center text-5xl font-bold leading-tight md:text-6xl lg:text-7xl">
+                {generatedSlides[currentSlideIndex]?.title}
+              </h1>
+              <div 
+                className="mb-8 h-1.5 w-32 rounded-full"
+                style={{ backgroundColor: slideDetails.style === 'minimal' ? '#0EA5E9' : '#3B82F6' }}
+              />
+              <p className="max-w-2xl text-center text-xl opacity-80 md:text-2xl">
+                {generatedSlides[currentSlideIndex]?.content.join(' | ')}
+              </p>
+            </div>
+          ) : currentSlideIndex === generatedSlides.length - 1 ? (
+            // Thank you slide - fullscreen
+            <div className="flex flex-1 flex-col items-center justify-center p-12">
+              <h1 className="mb-8 text-center text-5xl font-bold md:text-6xl lg:text-7xl">
+                {generatedSlides[currentSlideIndex]?.title}
+              </h1>
+              <div className="space-y-4 text-center text-xl opacity-80 md:text-2xl">
+                {generatedSlides[currentSlideIndex]?.content.map((item, i) => (
+                  <p key={i}>{item}</p>
+                ))}
+              </div>
+            </div>
+          ) : (
+            // Content slide - fullscreen
+            <div className="flex flex-1 flex-col p-12 md:p-16 lg:p-20">
+              <h1 className="mb-4 text-4xl font-bold md:text-5xl">
+                {generatedSlides[currentSlideIndex]?.title}
+              </h1>
+              <div 
+                className="mb-10 h-1.5 w-24 rounded-full"
+                style={{ backgroundColor: slideDetails.style === 'minimal' ? '#0EA5E9' : '#3B82F6' }}
+              />
+              <ul className="flex-1 space-y-6">
+                {generatedSlides[currentSlideIndex]?.content.map((item, i) => (
+                  <li key={i} className="flex items-start gap-4 text-xl md:text-2xl">
+                    <span 
+                      className="mt-3 h-3 w-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: slideDetails.style === 'minimal' ? '#0EA5E9' : '#3B82F6' }}
+                    />
+                    <span className="opacity-90">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           
-          {/* Fullscreen controls */}
-          <div className="flex items-center justify-between border-t border-white/10 bg-black/20 p-4">
-            <div className="text-sm">
-              {currentSlideIndex + 1} / {generatedSlides.length}
+          {/* Fullscreen controls bar */}
+          <div className="flex items-center justify-between bg-black/30 px-6 py-4 backdrop-blur-sm">
+            <div className="flex items-center gap-4">
+              <span className="rounded-full bg-white/10 px-4 py-1.5 text-sm font-medium">
+                {currentSlideIndex + 1} / {generatedSlides.length}
+              </span>
+              <span className="hidden text-sm opacity-60 md:block">
+                Click left/right or use arrow keys to navigate
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-white hover:bg-white/10"
+                className="h-9 gap-1.5 text-white hover:bg-white/10"
                 onClick={(e) => {
                   e.stopPropagation()
                   setCurrentSlideIndex(Math.max(0, currentSlideIndex - 1))
                 }}
+                disabled={currentSlideIndex === 0}
               >
                 <ChevronLeft className="h-4 w-4" />
+                <span className="hidden md:inline">Previous</span>
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-white hover:bg-white/10"
+                className="h-9 gap-1.5 text-white hover:bg-white/10"
                 onClick={(e) => {
                   e.stopPropagation()
                   setCurrentSlideIndex(Math.min(generatedSlides.length - 1, currentSlideIndex + 1))
                 }}
+                disabled={currentSlideIndex === generatedSlides.length - 1}
               >
+                <span className="hidden md:inline">Next</span>
                 <ChevronRight className="h-4 w-4" />
               </Button>
+              <div className="mx-2 h-6 w-px bg-white/20" />
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-white hover:bg-white/10"
+                className="h-9 text-white hover:bg-white/10"
                 onClick={(e) => {
                   e.stopPropagation()
                   setIsFullscreen(false)
                 }}
               >
+                <X className="mr-1.5 h-4 w-4" />
                 Exit
               </Button>
             </div>

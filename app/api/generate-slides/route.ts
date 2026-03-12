@@ -94,19 +94,16 @@ Do not include any text before or after the JSON. Only output the JSON object.`
 
     if (!createResponse.ok) {
       const errorText = await createResponse.text()
-      console.error('[v0] Error creating Manus task:', errorText)
-      throw new Error(`Manus API error: ${createResponse.status}`)
+      throw new Error(`Manus API error: ${createResponse.status} - ${errorText}`)
     }
 
     const createData = await createResponse.json()
-    console.log('[v0] Manus API response:', JSON.stringify(createData, null, 2))
     
     // The Manus API might return the task ID in different fields or return the result directly
     const taskId = createData.taskId || createData.id || createData.task_id
     
     // If response already contains the output/result, use it directly (some APIs return inline)
     if (createData.output || createData.result || createData.response || createData.message) {
-      console.log('[v0] Got direct response from Manus API')
       const directOutput = createData.output || createData.result || createData.response || createData.message || ''
       let slides: SlideData[] = []
       
@@ -122,7 +119,7 @@ Do not include any text before or after the JSON. Only output the JSON object.`
           slides = directOutput.slides
         }
       } catch {
-        console.log('[v0] JSON parsing failed, using text parser')
+        // JSON parsing failed, will use text parser
       }
       
       if (!slides || slides.length === 0) {
@@ -133,11 +130,8 @@ Do not include any text before or after the JSON. Only output the JSON object.`
     }
 
     if (!taskId) {
-      console.error('[v0] No task ID found in response:', createData)
       throw new Error('No task ID returned from Manus API')
     }
-    
-    console.log('[v0] Got task ID:', taskId)
 
     // Poll for completion
     let attempts = 0
@@ -157,7 +151,6 @@ Do not include any text before or after the JSON. Only output the JSON object.`
 
       if (statusResponse.ok) {
         const statusData = await statusResponse.json()
-        console.log('[v0] Poll status data:', JSON.stringify(statusData, null, 2))
         
         if (statusData.status === 'completed' || statusData.status === 'finished') {
           result = statusData
@@ -177,8 +170,6 @@ Do not include any text before or after the JSON. Only output the JSON object.`
 
     // Parse the response to extract slides
     const rawOutput = result.output || result.result || result.response || result.content || ''
-    console.log('[v0] Raw output type:', typeof rawOutput)
-    console.log('[v0] Raw output:', JSON.stringify(rawOutput, null, 2))
     
     // Convert to string if it's an object
     const output = typeof rawOutput === 'string' ? rawOutput : JSON.stringify(rawOutput)
